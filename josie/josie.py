@@ -1,8 +1,8 @@
 import binascii
 import logging
-import sys
 from pathlib import Path
 from time import time
+from typing import Optional
 
 import mmh3
 import numpy as np
@@ -14,18 +14,16 @@ from tqdm import tqdm
 from .core import JOSIEAlgorithm
 from .db import DBHandler
 from .io import RawTokenSet
+from .log import init_logger
 from .tokentable import TokenTableDisk, TokenTableMem
 from .util import get_result_ids, get_result_overlaps
 
 
-# TODO: by now, raw_tokens are stored inside the inverted index as byte arrays,
-# but maybe we can store them on a separate structure, and there keep only the
-# integer ID of the token
 class JOSIE:
     def __init__(
         self,
         db_connection_info: dict,
-        logfile: Path,
+        logfile: Optional[Path] = None,
         log_on_stdout: bool = True,
         db_tag: str = "",
     ) -> None:
@@ -34,32 +32,7 @@ class JOSIE:
         # Create the database handler
         self.db = DBHandler(db_tag, **self.connection_info)
 
-        if not logfile.parent.exists():
-            raise FileNotFoundError(
-                f"Directory doesn't exist: {logfile.parent.absolute()}"
-            )
-        self._init_logger(logfile)
-
-    def _init_logger(self, logfile: Path):
-        logger = logging.getLogger("JOSIE")
-        logger.setLevel(logging.DEBUG)
-
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-        )
-
-        file_handler = logging.FileHandler(logfile)
-        file_handler.setLevel(logging.DEBUG)  # Set minimum level for file
-        file_handler.setFormatter(formatter)
-
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)  # Set minimum level for console
-        console_handler.setFormatter(formatter)
-
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-
-        return logger
+        init_logger(logfile, log_on_stdout)
 
     def index(self, sets_path: Path, spark_config: dict):
         logger = logging.getLogger("JOSIE")
@@ -69,8 +42,9 @@ class JOSIE:
         conf = SparkConf().setAll(list(spark_config.items()))
         sc = SparkContext.getOrCreate(conf)
         spark = SparkSession(sparkContext=sc)
-
-        spark.sparkContext.setLogLevel("ERROR")
+        assert hasattr(spark, "sparkContext"), (
+            "Missing sparkContext attribute on sparkSession."
+        )
 
         token_sets = (
             spark.sparkContext.textFile(sets_path.as_uri())
@@ -192,14 +166,9 @@ class JOSIE:
             sid, indices = t
             return (sid, len(indices), len(indices), indices)
 
-        # FIX: using bytes it's really challenging to identify a token
-        # in the inverted index! Maybe storing directly the string would
-        # be a better option (even in BLEND is done so, and the tradeoff
-        # is acceptable)
         def _postinglist_format(t):
             token, raw_token, gid, sets = t
             byteatoken = binascii.hexlify(bytes(str(raw_token), "utf-8"))
-            raw_token = str(raw_token)[:256]
             set_ids = [int(s[0]) for s in sets]
             set_sizes = [int(s[1]) for s in sets]
             set_pos = [int(s[2]) for s in sets]
@@ -209,7 +178,6 @@ class JOSIE:
                 int(gid),
                 1,
                 byteatoken,
-                raw_token,
                 set_ids,
                 set_sizes,
                 set_pos,
@@ -248,7 +216,6 @@ class JOSIE:
                     "duplicate_group_id",
                     "duplicate_group_count",
                     "raw_token",
-                    "str_raw_token",
                     "set_ids",
                     "set_sizes",
                     "match_positions",
@@ -281,7 +248,7 @@ class JOSIE:
         logger.info("Loading database tables...")
         self.db.load_tables()
 
-        logger.info("Clearing Query table...")
+        logger.info("Clearing query table...")
         self.db.clear_query_table()
 
         logger.info(f"Adding {len(queries)} queries...")
@@ -341,7 +308,18 @@ class JOSIE:
 
         # execute the JOSIE algorithm for each query
         for q in tqdm(queries_rts):
-            perfs.append(JOSIEAlgorithm(self.db, tb, q, k, ignore_self=True))
+            perfs.append(
+                JOSIEAlgorithm(
+                    self.db,
+                    tb,
+                    q,
+                    k,
+                    ignore_self=True,
+                    verbose=any(
+                        isinstance(h, logging.StreamHandler) for h in logger.handlers
+                    ),
+                )
+            )
 
         logger.info(
             f"Finished experiment for {k=} in {round((time() - start) / 60, 3)} minutes"

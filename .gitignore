@@ -22,3 +22,7 @@ results-*/*
 *.pdf
 
 *.tar.gz
+
+# Ignores test data
+tests/data/
+.venv

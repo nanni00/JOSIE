@@ -6,7 +6,6 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     MetaData,
-    String,
     Table,
     create_engine,
     delete,
@@ -21,7 +20,6 @@ from sqlalchemy.orm import Session
 
 from .io import ListEntry, RawTokenSet
 
-# TODO: handle dynamic custom tablename in some good way
 InvertedList: Table
 Set: Table
 Query: Table
@@ -44,8 +42,6 @@ class DBHandler:
         self.read_list_cost_slope = 1661.93366983753
         self.read_list_cost_intercept = 1007857.48225696
 
-        self.session = Session(bind=self.engine)
-
         self.inverted_list_table_name = f"{self.dbtag}inverted_lists"
         self.sets_table_name = f"{self.dbtag}sets"
         self.query_table_name = f"{self.dbtag}queries"
@@ -53,25 +49,26 @@ class DBHandler:
         self.read_set_cost_samples_table_name = f"{self.dbtag}read_set_cost_samples"
 
     def execute_read(self, q, fetch, **kwargs):
-        results = self.session.execute(q, kwargs)
-        match fetch:
-            case "one":
-                return results.fetchone()
-            case "all":
-                return results.fetchall()
+        with Session(bind=self.engine) as session:
+            results = session.execute(q, kwargs)
+            match fetch:
+                case "one":
+                    return results.fetchone()
+                case "all":
+                    return results.fetchall()
 
     def execute_write(self, q, fetch, **kwargs):
-        results = self.session.execute(q, kwargs)
-        match fetch:
-            case "all":
-                results = results.fetchall()
-            case "one":
-                results = results.fetchone()
-            case "nofetch":
-                pass
-        self.session.commit()
-        self.session.close()
-        self.session = Session(bind=self.engine)
+        with Session(bind=self.engine) as session:
+            results = session.execute(q, kwargs)
+            match fetch:
+                case "all":
+                    results = results.fetchall()
+                case "one":
+                    results = results.fetchone()
+                case "nofetch":
+                    pass
+            session.commit()
+            session.close()
         return results
 
     def create_tables(self):
@@ -86,8 +83,6 @@ class DBHandler:
             Column("duplicate_group_id", Integer),
             Column("duplicate_group_count", Integer),
             Column("raw_token", LargeBinary),
-            Column("str_raw_token", String),
-            # Column('raw_token',             Integer),
             Column("set_ids", ARRAY(Integer)),
             Column("set_sizes", ARRAY(Integer)),
             Column("match_positions", ARRAY(Integer)),
@@ -394,30 +389,12 @@ class DBHandler:
             q = f"""SELECT regr_slope(cost, frequency), regr_intercept(cost, frequency)
                 FROM {ReadListCostSamples.name};"""
             slope, intercept = session.execute(text(q)).fetchone()
-
-            # if verbose:
-            #     print(
-            #         f"Resetting read list cost slope {self.read_list_cost_slope:.4f} -> {slope:.4f}"
-            #     )
-            #     print(
-            #         f"Resetting read list cost intercept {self.read_list_cost_intercept:.4f} -> {intercept:.4f}"
-            #     )
-
             self.read_list_cost_slope = slope
             self.read_list_cost_intercept = intercept
 
             q = f"""SELECT regr_slope(cost, size), regr_intercept(cost, size)
                     FROM {ReadSetCostSamples.name};"""
             slope, intercept = session.execute(text(q)).fetchone()
-
-            # if verbose:
-            #     print(
-            #         f"Resetting read set cost slope {self.read_set_cost_slope:.4f} -> {slope:.4f}"
-            #     )
-            #     print(
-            #         f"Resetting read set cost intercept {self.read_set_cost_intercept:.4f} -> {intercept:.4f}"
-            #     )
-
             self.read_set_cost_slope = slope
             self.read_set_cost_intercept = intercept
 

@@ -1,5 +1,7 @@
 import time
 
+from tqdm import tqdm
+
 from .db import DBHandler
 from .io import RawTokenSet
 from .tokentable import TokenTable
@@ -33,12 +35,15 @@ def JOSIEAlgorithm(
     batch_size: int = 20,
     expensive_estimation_budget: int = 5000,
     ignore_self: bool = True,
+    verbose: bool = False,
 ):
     exp_result = ExperimentResult()
+    disable_tqdm = not verbose
 
     start = time.time()
     tokens, freqs, gids = tb.process(query)
     read_list_costs = [0.0] * len(freqs)
+
     for i in range(len(freqs)):
         if i == 0:
             read_list_costs[i] = db.read_list_cost(freqs[i] + 1)
@@ -58,7 +63,9 @@ def JOSIEAlgorithm(
 
     curr_batch_lists = batch_size
 
-    for i in range(query_size):
+    for i in tqdm(
+        range(query_size), desc="Query tokens: ", leave=False, disable=disable_tqdm
+    ):
         token = tokens[i]
         skipped_overlap = num_skipped
         max_overlap_unseen_candidate = upperbound_overlap_unknown_candidate(
@@ -77,7 +84,9 @@ def JOSIEAlgorithm(
 
         # Merge this list and compute counter entries
         # Skip sets that has been computed for exact overlap previously
-        for entry in entries:
+        for entry in tqdm(
+            entries, "Analyzing posting list: ", leave=False, disable=disable_tqdm
+        ):
             if entry.set_id in ignores:
                 continue
 
@@ -153,7 +162,12 @@ def JOSIEAlgorithm(
         # Greedily determine the next best candidate until the qualified
         # candidates exhausted or when reading the next batch of lists yield
         # better net benefit
-        for candidate in candidates:
+        for candidate in tqdm(
+            candidates,
+            desc="Candidates evaluation: ",
+            leave=False,
+            disable=disable_tqdm,
+        ):
             # Skip ones that are already been eliminated
             if candidate is None:
                 continue
