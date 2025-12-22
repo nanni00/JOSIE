@@ -2,28 +2,26 @@ import time
 
 from tqdm import tqdm
 
-from .db import DBHandler
-from .io import RawTokenSet
-from .tokentable import TokenTable
 from .common import overlap
+from .db import DBHandler
 from .exp import ExperimentResult, write_result_string
-
 from .heap import (
     SearchResultHeap,
-    push_candidate,
     kth_overlap,
     kth_overlap_after_push,
     ordered_results,
+    push_candidate,
 )
-
+from .io import RawTokenSet
+from .tokentable import TokenTable
 from .util import (
     CandidateEntry,
+    next_batch_distinct_lists,
     process_candidates_init,
     process_candidates_update,
-    upperbound_overlap_unknown_candidate,
-    next_batch_distinct_lists,
-    read_set_benefit,
     read_lists_benefit_for_candidate,
+    read_set_benefit,
+    upperbound_overlap_unknown_candidate,
 )
 
 

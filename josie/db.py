@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Optional
 
 import psycopg
 
@@ -7,13 +8,15 @@ from .io import ListEntry, RawTokenSet
 
 
 class DBHandler:
-    def __init__(self, **connection_info) -> None:
-        self._database = connection_info.pop("database")
-        self._username = connection_info.pop("username", "user")
-        self._password = connection_info.pop("password", "user")
-        self._host = connection_info.pop("host", "127.0.0.1")
-        self._port = connection_info.pop("port", 5442)
-        self._conn_spec = connection_info
+    def __init__(
+        self, db_config: dict, prepend_table_name_tag: Optional[str] = None
+    ) -> None:
+        self._database = db_config.pop("database")
+        self._username = db_config.pop("username", "user")
+        self._password = db_config.pop("password", "user")
+        self._host = db_config.pop("host", "127.0.0.1")
+        self._port = db_config.pop("port", 5442)
+        self._conn_spec = db_config
 
         # default drivername for PostgreSQL
         self._drivername = "postgresql"
@@ -38,11 +41,15 @@ class DBHandler:
         self.read_list_cost_slope = 1661.93366983753
         self.read_list_cost_intercept = 1007857.48225696
 
-        self.inverted_list_table_name = "inverted_lists"
-        self.sets_table_name = "sets"
-        self.query_table_name = "queries"
-        self.read_list_cost_samples_table_name = "read_list_cost_samples"
-        self.read_set_cost_samples_table_name = "read_set_cost_samples"
+        self.inverted_list_table_name = f"{prepend_table_name_tag}inverted_lists"
+        self.sets_table_name = f"{prepend_table_name_tag}sets"
+        self.query_table_name = f"{prepend_table_name_tag}queries"
+        self.read_list_cost_samples_table_name = (
+            f"{prepend_table_name_tag}read_list_cost_samples"
+        )
+        self.read_set_cost_samples_table_name = (
+            f"{prepend_table_name_tag}read_set_cost_samples"
+        )
 
     def open(self):
         self.conn = psycopg.connect(self.uri)
@@ -335,8 +342,8 @@ class DBHandler:
         return self._exec_query(q, prepare=True)
 
     def insert_read_set_cost(self, set_id: int, size: int, cost: int | float):
-        q = """
-            INSERT INTO read_set_cost_samples (id, size, cost)
+        q = f"""
+            INSERT INTO {self.read_set_cost_samples_table_name} (id, size, cost)
             VALUES (%(id)s, %(size)s, %(cost)s);
         """
         return self._exec_query(
@@ -347,7 +354,7 @@ class DBHandler:
         self, min_freq: int, max_freq: int, sample_size_per_step: int
     ):
         q = f"""
-            INSERT INTO read_list_cost_samples (token, frequency)
+            INSERT INTO {self.read_list_cost_samples_table_name} (token, frequency)
             SELECT token, frequency
             FROM {self.inverted_list_table_name}
             WHERE frequency >= %(min_f)s AND frequency < %(max_f)s
@@ -365,9 +372,9 @@ class DBHandler:
         )
 
     def count_token_from_read_list_cost(self, min_freq: int, max_freq: int):
-        q = """
+        q = f"""
             SELECT COUNT(token) 
-            FROM read_list_cost_samples
+            FROM {self.read_list_cost_samples_table_name}
             WHERE frequency >= %(min_f)s AND frequency <= %(max_f)s;
         """
         res = self._exec_query(
@@ -376,13 +383,13 @@ class DBHandler:
         return res[0] if res else 0
 
     def get_array_agg_token_read_list_cost(self):
-        q = "SELECT array_agg(token) FROM read_list_cost_samples;"
+        q = f"SELECT array_agg(token) FROM {self.read_list_cost_samples_table_name};"
         res = self._exec_query(q, prepare=True)
         return res[0][0] if res else []
 
     def update_read_list_cost(self, token: int, cost: int | float):
-        q = """
-            UPDATE read_list_cost_samples
+        q = f"""
+            UPDATE {self.read_list_cost_samples_table_name}
             SET cost = %(cost)s
             WHERE token = %(token)s;
         """

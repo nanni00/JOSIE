@@ -22,23 +22,26 @@ from .util import get_result_ids, get_result_overlaps
 class JOSIE:
     def __init__(
         self,
-        db_connection_info: dict,
+        db_config: dict,
+        spark_config: dict,
         logfile: Optional[Path] = None,
         log_on_stdout: bool = True,
+        prepend_table_name_tag: Optional[str] = None,
     ) -> None:
-        self.connection_info = db_connection_info
+        self.db_config = db_config
+        self.spark_config = spark_config
 
         # Create the database handler
-        self.db = DBHandler(**self.connection_info)
+        self.db = DBHandler(db_config, prepend_table_name_tag)
 
         init_logger(logfile, log_on_stdout)
 
-    def index(self, sets_path: Path, spark_config: dict):
+    def index(self, sets_path: Path):
         logger = logging.getLogger("JOSIE")
         logger.info("Creating integer sets and inverted index tables...")
         self.db.create_tables(drop_before=True)
 
-        conf = SparkConf().setAll(list(spark_config.items()))
+        conf = SparkConf().setAll(list(self.spark_config.items()))
         sc = SparkContext.getOrCreate(conf)
         spark = SparkSession(sparkContext=sc)
         assert hasattr(spark, "sparkContext"), (

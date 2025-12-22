@@ -57,7 +57,7 @@ def test(num_sets: int, min_size: int, max_size: int, universe_size: int):
         "port": 5442,
     }
 
-    temp_spark_path = Path(__file__).parent.joinpath("spark_tmp")
+    temp_spark_path = Path(__file__).parent.joinpath("data", "spark_tmp")
     temp_spark_path.mkdir(parents=True, exist_ok=True)
 
     spark_config = {
@@ -72,9 +72,9 @@ def test(num_sets: int, min_size: int, max_size: int, universe_size: int):
         "spark.driver.extraClassPath": f"{os.environ['HOME']}/.ivy2/jars/org.postgresql_postgresql-42.7.3.jar",
     }
 
-    index = JOSIE(db_config, None, True)
+    index = JOSIE(db_config, spark_config, None, True, prepend_table_name_tag="j4t_")
     index.open()
-    index.index(sets_path, spark_config)
+    index.index(sets_path)
 
     print(index.db.count_sets())
     print(index.db.count_posting_lists())
@@ -102,6 +102,6 @@ def t3():
 
 
 if __name__ == "__main__":
-    # t1()
+    t1()
     # t2()
-    t3()
+    # t3()

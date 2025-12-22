@@ -4,7 +4,6 @@ import logging
 from .db import DBHandler
 from .io import RawTokenSet
 
-
 # Constants
 MINHASH_SEED = 42
 MINHASH_SIZE = 200

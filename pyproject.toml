@@ -9,6 +9,5 @@ dependencies = [
     "numpy>=2.3.5",
     "psycopg>=3.3.2",
     "pyspark>=4.1.0",
-    "sqlalchemy>=2.0.45",
     "tqdm>=4.67.1",
 ]
