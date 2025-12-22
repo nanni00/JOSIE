@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "mmh3>=5.2.0",
     "numpy>=2.3.5",
-    "psycopg2-binary>=2.9.11",
+    "psycopg>=3.3.2",
     "pyspark>=4.1.0",
     "sqlalchemy>=2.0.45",
     "tqdm>=4.67.1",

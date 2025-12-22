@@ -25,19 +25,18 @@ class JOSIE:
         db_connection_info: dict,
         logfile: Optional[Path] = None,
         log_on_stdout: bool = True,
-        db_tag: str = "",
     ) -> None:
         self.connection_info = db_connection_info
 
         # Create the database handler
-        self.db = DBHandler(db_tag, **self.connection_info)
+        self.db = DBHandler(**self.connection_info)
 
         init_logger(logfile, log_on_stdout)
 
     def index(self, sets_path: Path, spark_config: dict):
         logger = logging.getLogger("JOSIE")
         logger.info("Creating integer sets and inverted index tables...")
-        self.db.create_tables()
+        self.db.create_tables(drop_before=True)
 
         conf = SparkConf().setAll(list(spark_config.items()))
         sc = SparkContext.getOrCreate(conf)
@@ -168,10 +167,13 @@ class JOSIE:
 
         def _postinglist_format(t):
             token, raw_token, gid, sets = t
-            byteatoken = binascii.hexlify(bytes(str(raw_token), "utf-8"))
-            set_ids = [int(s[0]) for s in sets]
-            set_sizes = [int(s[1]) for s in sets]
-            set_pos = [int(s[2]) for s in sets]
+            byteatoken = binascii.hexlify(str(raw_token).encode("utf-8"))
+            set_ids, set_sizes, set_pos = zip(*sets)
+
+            set_ids = list(map(int, set_ids))
+            set_sizes = list(map(int, set_sizes))
+            set_pos = list(map(int, set_pos))
+
             return (
                 int(token),
                 len(sets),
@@ -182,18 +184,13 @@ class JOSIE:
                 set_sizes,
                 set_pos,
             )
-            # return (int(token), len(sets), int(gid), 1, raw_token, set_ids, set_sizes, set_pos)
 
-        url = self.db.url.create(
-            self.db.url.drivername,
-            host=self.db.url.host,
-            port=self.db.url.port,
-            database=self.db.url.database,
-        ).render_as_string()
+        uri = self.db.jdbc_uri
+        logger.info(f"Placing data at jdbc:{uri}")
 
         properties: dict[str, str] = {
-            "user": self.db.username,
-            "password": self.db.password,
+            "user": self.db._username,
+            "password": self.db._password,
             "driver": "org.postgresql.Driver",
         }
 
@@ -201,7 +198,7 @@ class JOSIE:
             integer_sets.map(lambda t: _integer_set_format(t))
             .toDF(schema=["id", "size", "num_non_singular_token", "tokens"])
             .write.jdbc(
-                f"jdbc:{url}", self.db.sets_table_name, "append", properties=properties
+                f"jdbc:{uri}", self.db.sets_table_name, "append", properties=properties
             )
         )
 
@@ -222,7 +219,7 @@ class JOSIE:
                 ]
             )
             .write.jdbc(
-                f"jdbc:{url}",
+                f"jdbc:{uri}",
                 self.db.inverted_list_table_name,
                 "append",
                 properties=properties,
@@ -243,10 +240,9 @@ class JOSIE:
         reset_cost_function_parameters: bool = False,
         force_sampling_cost: bool = False,
         token_table_on_memory: bool = False,
+        show_query_progress: bool = False,
     ):
         logger = logging.getLogger("JOSIE")
-        logger.info("Loading database tables...")
-        self.db.load_tables()
 
         logger.info("Clearing query table...")
         self.db.clear_query_table()
@@ -315,9 +311,7 @@ class JOSIE:
                     q,
                     k,
                     ignore_self=True,
-                    verbose=any(
-                        isinstance(h, logging.StreamHandler) for h in logger.handlers
-                    ),
+                    verbose=show_query_progress,
                 )
             )
 
@@ -345,3 +339,9 @@ class JOSIE:
 
     def clean(self):
         self.db.drop_tables()
+
+    def open(self):
+        self.db.open()
+
+    def close(self):
+        self.db.close()

@@ -51,7 +51,6 @@ def test(num_sets: int, min_size: int, max_size: int, universe_size: int):
 
     db_config = {
         "database": "josie-testing",
-        "drivername": "postgresql",
         "username": "nanni",
         "password": "nanni",
         "host": "127.0.0.1",
@@ -74,28 +73,35 @@ def test(num_sets: int, min_size: int, max_size: int, universe_size: int):
     }
 
     index = JOSIE(db_config, None, True)
-    # index.index(sets_path, spark_config)
+    index.open()
+    index.index(sets_path, spark_config)
 
-    queries = [set_id for set_id, _ in sets][:1000]
-    _results = index.query(queries, k=10)
+    print(index.db.count_sets())
+    print(index.db.count_posting_lists())
+
+    queries = [set_id for set_id, _ in sets][:100]
+    _results = index.query(
+        queries, k=10, force_sampling_cost=True, reset_cost_function_parameters=True
+    )
+    index.close()
 
 
-def small():
-    print("\n" + " SMALL TEST ".center(100, "=") + "\n")
+def t1():
+    print("\n" + " TEST 1 (small)".center(100, "=") + "\n")
     test(100, 10, 100, int(1e4))
 
 
-def medium():
-    print("\n" + " MEDIUM TEST ".center(100, "=") + "\n")
+def t2():
+    print("\n" + " TEST 2 (small)".center(100, "=") + "\n")
     test(1000, 10, 100, int(1e5))
 
 
-def large():
-    print("\n" + " LARGE TEST ".center(100, "=") + "\n")
-    test(100_000, 10, 1000, int(1e9))
+def t3():
+    print("\n" + " TEST 3 (small-medium)".center(100, "=") + "\n")
+    test(1000, 10, 1000, int(1e5))
 
 
 if __name__ == "__main__":
-    # small()
-    # medium()
-    large()
+    # t1()
+    # t2()
+    t3()
