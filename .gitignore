@@ -26,3 +26,5 @@ results-*/*
 # Ignores test data
 tests/data/
 .venv
+sets.txt
+spark_tmp
